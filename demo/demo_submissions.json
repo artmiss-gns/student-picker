@@ -1,0 +1,101 @@
+{
+  "session": "demo_session",
+  "submissions": [
+    {
+      "id": "s_1",
+      "full_name": "Alice Smith",
+      "filename": "alice_smith_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 1", "Subtask 2", "Subtask 3", "Subtask 4"],
+      "attempt_count": 4,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    },
+    {
+      "id": "s_2",
+      "full_name": "Bob Jones",
+      "filename": "bob_jones_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 1", "Subtask 2"],
+      "attempt_count": 2,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    },
+    {
+      "id": "s_3",
+      "full_name": "Charlie Brown",
+      "filename": "charlie_brown_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 1", "Subtask 2", "Subtask 3"],
+      "attempt_count": 3,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    },
+    {
+      "id": "s_4",
+      "full_name": "Diana Prince",
+      "filename": "diana_prince_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 1", "Subtask 2", "Subtask 3", "Subtask 4"],
+      "attempt_count": 4,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    },
+    {
+      "id": "s_5",
+      "full_name": "Ethan Hunt",
+      "filename": "ethan_hunt_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 2", "Subtask 3", "Subtask 4"],
+      "attempt_count": 3,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    },
+    {
+      "id": "s_6",
+      "full_name": "Fiona Gallagher",
+      "filename": "fiona_gallagher_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 1", "Subtask 2", "Subtask 4"],
+      "attempt_count": 3,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    },
+    {
+      "id": "s_7",
+      "full_name": "George Clark",
+      "filename": "george_clark_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 1", "Subtask 3"],
+      "attempt_count": 2,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    },
+    {
+      "id": "s_8",
+      "full_name": "Hannah Abbott",
+      "filename": "hannah_abbott_ex1.ipynb",
+      "subtasks_attempted": ["Subtask 1", "Subtask 2", "Subtask 3", "Subtask 4"],
+      "attempt_count": 4,
+      "valid_submission": true,
+      "strikes": 0,
+      "has_presented": false,
+      "subtask_presented": null,
+      "status": "eligible"
+    }
+  ]
+}
