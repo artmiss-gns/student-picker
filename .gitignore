@@ -18,6 +18,11 @@ ENV/
 .vscode/
 
 # Local session logs & student submissions
+sessions/
+.session_data/
+submissions_output/
+submissions.json
+submissions.csv
 *session_state.json
 *.local.json
 *.xlsx

@@ -11,11 +11,13 @@ Built with Python's standard library only. No external packages needed.
 ## Features
 
 - **Projector safe:** Shows only student names in large text. No private emails, IDs, or grades on screen.
+- **Session management:** Auto-discovers existing session folders or files. Switch between tutorial sessions with one click in the header dropdown.
+- **Web file loading / ingestion:** Ingest notebooks or load session files directly from the browser modal or via CLI.
 - **Subtask aware:** Only draws from students who actually submitted that specific exercise task.
 - **Attendance & strikes:** Record if a student passed, couldn't explain (no strike), or was absent (+1 strike).
 - **Already presented warning:** Warns you if you try to draw for a subtask someone already presented.
 - **Manual toggles:** You can click subtask badges (`T1`–`T4`) in the list to quickly add or remove tasks if someone asks.
-- **Auto saves:** Keeps state in a local `.session_data/session_state.json` file.
+- **Auto saves:** Keeps state in a file-based `session_state.json` file inside the session folder.
 
 ---
 

@@ -1,3 +1,9 @@
+"""
+Web UI Server for student-picker.
+Projection-safe, modern dark-mode stage with subtask filtering, real-time toggles,
+and session ingestion directly from browser.
+"""
+
 import csv
 import json
 import os
@@ -7,23 +13,22 @@ import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from .core import (
+    SessionManager,
     draw_student,
     get_eligible_pool,
-    get_merged_students,
     load_session_state,
-    load_submissions_data,
-    save_session_state,
 )
+from .ingest import process_submissions_folder
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TA Presentation Selector</title>
+  <title>Student Picker</title>
   <style>
     :root {
       --bg: #090d16;
@@ -40,17 +45,19 @@ HTML_PAGE = """<!DOCTYPE html>
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; }
     body { background-color: var(--bg); color: var(--text); padding: 24px; min-height: 100vh; overflow-x: hidden; }
-    .container { max-width: 1120px; margin: 0 auto; }
+    .container { max-width: 1140px; margin: 0 auto; }
     
     /* Header */
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--card-border); }
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 18px; border-bottom: 1px solid var(--card-border); gap: 16px; flex-wrap: wrap; }
     .title-group h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; color: #fff; display: flex; align-items: center; gap: 12px; }
     .title-group p { color: var(--text-muted); font-size: 14px; margin-top: 4px; }
     .badge-session { background: #0369a1; color: #e0f2fe; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
     
-    .header-actions { display: flex; gap: 10px; align-items: center; }
-    select, button { font-size: 13px; font-weight: 600; cursor: pointer; border: none; border-radius: 10px; transition: all 0.2s ease; }
+    .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    select, button, input { font-size: 13px; font-weight: 600; cursor: pointer; border: none; border-radius: 10px; transition: all 0.2s ease; }
     select { background: #1e293b; color: #fff; padding: 8px 14px; border: 1px solid var(--card-border); outline: none; }
+    .btn-primary { background: #0284c7; color: #fff; padding: 8px 16px; }
+    .btn-primary:hover { background: #0369a1; transform: translateY(-1px); }
     .btn-secondary { background: #1e293b; color: var(--text-muted); padding: 8px 14px; border: 1px solid var(--card-border); }
     .btn-secondary:hover { background: #334155; color: #fff; }
     .btn-danger-outline { background: transparent; color: #f87171; border: 1px solid #7f1d1d; padding: 8px 14px; }
@@ -106,6 +113,7 @@ HTML_PAGE = """<!DOCTYPE html>
       display: flex; align-items: center; gap: 12px; margin-top: 10px;
     }
     .btn-draw:hover { background: linear-gradient(135deg, #0369a1 0%, #075985 100%); transform: translateY(-2px); box-shadow: 0 12px 28px rgba(2, 132, 199, 0.5); }
+    .btn-draw:active { transform: translateY(0); }
     .kbd-hint { font-size: 11px; padding: 2px 7px; background: rgba(255,255,255,0.2); border-radius: 6px; font-weight: 700; }
 
     /* Student Presentation View */
@@ -229,16 +237,17 @@ HTML_PAGE = """<!DOCTYPE html>
 
     /* Modals */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); z-index: 200; align-items: center; justify-content: center; }
-    .modal-card { background: #131c2e; border: 1px solid #f59e0b; border-radius: 18px; padding: 28px; max-width: 460px; width: 90%; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.6); animation: modalPop 0.2s ease forwards; }
+    .modal-card { background: #131c2e; border: 1px solid #1e293b; border-radius: 18px; padding: 28px; max-width: 520px; width: 92%; box-shadow: 0 20px 40px rgba(0,0,0,0.6); animation: modalPop 0.2s ease forwards; text-align: left; }
     @keyframes modalPop { 0% { opacity: 0; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1); } }
-    .modal-icon { font-size: 38px; margin-bottom: 12px; }
-    .modal-title { font-size: 20px; font-weight: 800; color: #f59e0b; margin-bottom: 8px; }
-    .modal-body { font-size: 14px; color: var(--text-muted); line-height: 1.5; margin-bottom: 24px; }
-    .modal-actions { display: flex; gap: 12px; justify-content: center; }
-    .btn-modal-confirm { background: #d97706; color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 700; }
-    .btn-modal-confirm:hover { background: #b45309; }
-    .btn-modal-cancel { background: #334155; color: #fff; padding: 12px 20px; border-radius: 10px; font-weight: 600; }
-    .btn-modal-cancel:hover { background: #475569; }
+    .modal-title { font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .modal-body { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    
+    /* Ingest Form Inputs */
+    .form-group { margin-bottom: 14px; }
+    .form-label { display: block; font-size: 12px; font-weight: 700; color: #cbd5e1; margin-bottom: 6px; }
+    .form-input { width: 100%; background: #090d16; border: 1px solid var(--card-border); color: #fff; padding: 9px 12px; border-radius: 8px; font-size: 13px; outline: none; }
+    .form-input:focus { border-color: var(--primary); }
 
     #toast { position: fixed; bottom: 24px; right: 24px; background: #0284c7; color: #fff; padding: 12px 22px; border-radius: 12px; font-size: 14px; font-weight: 600; box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: all 0.25s ease; z-index: 100; transform: translateY(10px); }
     #toast.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
@@ -251,15 +260,56 @@ HTML_PAGE = """<!DOCTYPE html>
 
 <!-- Subtask Warning Modal -->
 <div class="modal-overlay" id="subtaskWarningModal">
-  <div class="modal-card">
-    <div class="modal-icon">⚠️</div>
-    <div class="modal-title" id="modalTitle">Subtask Already Presented</div>
+  <div class="modal-card" style="text-align:center; max-width:440px; border-color:#f59e0b;">
+    <div style="font-size:38px; margin-bottom:12px;">⚠️</div>
+    <div class="modal-title" style="color:#f59e0b;">Subtask Already Presented</div>
     <div class="modal-body" id="modalBody">
       This subtask was already successfully presented. Do you want to select another student anyway?
     </div>
+    <div class="modal-actions" style="justify-content:center;">
+      <button class="btn-secondary" onclick="closeWarningModal()">Cancel</button>
+      <button class="btn-primary" style="background:#d97706;" onclick="confirmDrawAgain()">Yes, Draw Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ingest / Load Session Modal -->
+<div class="modal-overlay" id="ingestModal">
+  <div class="modal-card">
+    <div class="modal-title">📂 Ingest Submissions / Load Session</div>
+    <div class="modal-body">
+      Select an LMS spreadsheet (Excel/CSV) and optional blank notebook template to automatically analyze student submissions:
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Session Name (e.g. exercise_2)</label>
+      <input type="text" class="form-input" id="ingestSessionName" placeholder="exercise_2">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">LMS Submissions File Path (.xlsx or .csv)</label>
+      <input type="text" class="form-input" id="ingestLmsPath" placeholder="/path/to/Exercise 2.xlsx">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Blank Base Notebook (.ipynb, optional for diffing)</label>
+      <input type="text" class="form-input" id="ingestBasePath" placeholder="/path/to/exercise2_data.ipynb">
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 2fr; gap:12px;">
+      <div class="form-group">
+        <label class="form-label">Group (Optional)</label>
+        <input type="number" class="form-input" id="ingestGroupNum" placeholder="6">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Roster CSV (Optional)</label>
+        <input type="text" class="form-input" id="ingestRosterPath" placeholder="/path/to/group_roster.csv">
+      </div>
+    </div>
+
     <div class="modal-actions">
-      <button class="btn-modal-cancel" onclick="closeWarningModal()">Cancel</button>
-      <button class="btn-modal-confirm" onclick="confirmDrawAgain()">Yes, Draw Again</button>
+      <button class="btn-secondary" onclick="closeIngestModal()">Cancel</button>
+      <button class="btn-primary" onclick="runIngestFromModal()">🚀 Run Ingest & Load</button>
     </div>
   </div>
 </div>
@@ -267,10 +317,12 @@ HTML_PAGE = """<!DOCTYPE html>
 <div class="container">
   <header>
     <div class="title-group">
-      <h1>Presentation Selector <span class="badge-session" id="sessionBadge">Active Session</span></h1>
-      <p>Projection-Safe Random Selection & Presentation Tracker</p>
+      <h1>Student Picker <span class="badge-session" id="sessionBadge">Active</span></h1>
+      <p>Projection-Safe Presenter Selection & Participation Tracker</p>
     </div>
     <div class="header-actions">
+      <select id="sessionSelect" onchange="changeSession(this.value)" title="Select Session"></select>
+      <button class="btn-primary" onclick="openIngestModal()">📂 Ingest / Load</button>
       <button class="btn-secondary" onclick="exportReport()">📥 Export CSV</button>
       <button class="btn-danger-outline" onclick="resetSession()">Reset</button>
     </div>
@@ -323,7 +375,7 @@ HTML_PAGE = """<!DOCTYPE html>
       <div class="selector-stage-empty" id="drawView">
         <div class="empty-icon">🎯</div>
         <div class="stage-title">Ready to Draw for <span id="stageSubtaskLabel" style="color:var(--primary);">Subtask 1</span></div>
-        <div class="stage-desc">Drawing at random from students who completed this subtask and have not yet presented.</div>
+        <div class="stage-desc">Drawing randomly from students who completed this subtask and have not presented.</div>
         <button class="btn-draw" id="drawBtn" onclick="requestDrawStudent()">
           🎲 Draw Student <span class="kbd-hint">Space</span>
         </button>
@@ -428,7 +480,7 @@ HTML_PAGE = """<!DOCTYPE html>
 </div>
 
 <script>
-  let state = { students: [], history: [], session: 'session' };
+  let state = { students: [], history: [], session: 'default', available_sessions: [] };
   let currentSubtask = 'Subtask 1';
   let currentDrawnStudent = null;
   let currentRosterFilter = 'All';
@@ -436,8 +488,79 @@ HTML_PAGE = """<!DOCTYPE html>
   async function loadData() {
     const res = await fetch('/api/state');
     state = await res.json();
+    
+    // Update session selector dropdown
+    const sel = document.getElementById('sessionSelect');
+    sel.innerHTML = '';
+    (state.available_sessions || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.innerText = s.name.replace('_', ' ');
+      if (s.name === state.session) opt.selected = true;
+      sel.appendChild(opt);
+    });
+
     document.getElementById('sessionBadge').innerText = (state.session || 'Active').replace('_', ' ');
     render();
+  }
+
+  async function changeSession(sessionName) {
+    const res = await fetch('/api/set_session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: sessionName })
+    });
+    state = await res.json();
+    currentDrawnStudent = null;
+    document.getElementById('studentView').style.display = 'none';
+    document.getElementById('drawView').style.display = 'block';
+    document.getElementById('sessionBadge').innerText = (state.session || 'Active').replace('_', ' ');
+    showToast("Switched to " + sessionName.replace('_', ' '));
+    render();
+  }
+
+  function openIngestModal() {
+    document.getElementById('ingestModal').style.display = 'flex';
+  }
+
+  function closeIngestModal() {
+    document.getElementById('ingestModal').style.display = 'none';
+  }
+
+  async function runIngestFromModal() {
+    const name = document.getElementById('ingestSessionName').value.trim();
+    const lmsPath = document.getElementById('ingestLmsPath').value.trim();
+    const basePath = document.getElementById('ingestBasePath').value.trim();
+    const groupNum = document.getElementById('ingestGroupNum').value.trim();
+    const rosterPath = document.getElementById('ingestRosterPath').value.trim();
+
+    if (!lmsPath) {
+      alert("Please provide the LMS Submissions file path (.xlsx or .csv)");
+      return;
+    }
+
+    showToast("Ingesting submissions... please wait");
+    const res = await fetch('/api/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_name: name || 'exercise_session',
+        lms_path: lmsPath,
+        base_path: basePath || null,
+        group: groupNum ? parseInt(groupNum) : null,
+        roster_path: rosterPath || null
+      })
+    });
+
+    if (res.ok) {
+      state = await res.json();
+      closeIngestModal();
+      showToast("Ingest complete! Session loaded 🎉");
+      loadData();
+    } else {
+      const err = await res.json();
+      alert("Ingest error: " + (err.error || "Failed to process files"));
+    }
   }
 
   function getPresenters(subtask) {
@@ -728,8 +851,12 @@ HTML_PAGE = """<!DOCTYPE html>
   window.addEventListener('keydown', (e) => {
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
     const warnModal = document.getElementById('subtaskWarningModal');
-    if (warnModal.style.display === 'flex') {
-      if (e.key === 'Escape') closeWarningModal();
+    const ingModal = document.getElementById('ingestModal');
+    if (warnModal.style.display === 'flex' || ingModal.style.display === 'flex') {
+      if (e.key === 'Escape') {
+        closeWarningModal();
+        closeIngestModal();
+      }
       return;
     }
 
@@ -802,17 +929,30 @@ HTML_PAGE = """<!DOCTYPE html>
 
 
 class AppServer:
-    def __init__(self, data_path: Path, session_dir: Path, port: int = 8006):
-        self.data_path = data_path
-        self.session_dir = session_dir
-        self.port = port
-        self.base_students = load_submissions_data(data_path)
+    def __init__(
+        self,
+        session_manager_or_path: Union[SessionManager, Path, str],
+        session_dir: Optional[Union[Path, str]] = None,
+        port: int = 8006,
+    ):
+        if isinstance(session_manager_or_path, SessionManager):
+            self.session_manager = session_manager_or_path
+            self.port = port
+        else:
+            data_path = Path(session_manager_or_path).resolve()
+            sm = SessionManager(base_dir=data_path.parent, default_session_path=data_path)
+            if session_dir:
+                sm.active_session_dir = Path(session_dir).resolve()
+                sm.active_session_dir.mkdir(parents=True, exist_ok=True)
+            self.session_manager = sm
+            self.port = port
 
     def get_state(self) -> Dict[str, Any]:
-        students = get_merged_students(self.base_students, self.session_dir)
-        session_state = load_session_state(self.session_dir)
+        students = self.session_manager.get_current_students()
+        session_state = load_session_state(self.session_manager.active_session_dir) if self.session_manager.active_session_dir else {}
         return {
-            "session": self.session_dir.name,
+            "session": self.session_manager.active_session_name,
+            "available_sessions": self.session_manager.list_sessions(),
             "students": students,
             "history": session_state.get("history", []),
         }
@@ -859,7 +999,44 @@ class AppServer:
                 students = state["students"]
                 history = state.get("history", [])
 
-                if url.path == "/api/action":
+                if url.path == "/api/set_session":
+                    session_name = payload.get("session")
+                    if session_name:
+                        server_instance.session_manager.set_active_session(session_name)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(server_instance.get_state(), ensure_ascii=False).encode("utf-8"))
+
+                elif url.path == "/api/ingest":
+                    session_name = payload.get("session_name", "session")
+                    lms_path = Path(payload.get("lms_path", "")).resolve()
+                    base_path = Path(payload.get("base_path")).resolve() if payload.get("base_path") else None
+                    group = payload.get("group")
+                    roster_path = Path(payload.get("roster_path")).resolve() if payload.get("roster_path") else None
+
+                    if not lms_path.exists():
+                        self.send_response(400)
+                        self.send_header("Content-Type", "application/json; charset=utf-8")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": f"LMS file not found: {lms_path}"}).encode("utf-8"))
+                        return
+
+                    session_dir = server_instance.session_manager.sessions_dir / session_name
+                    process_submissions_folder(
+                        submissions_file=lms_path,
+                        base_notebook=base_path,
+                        group_filter=group,
+                        output_dir=session_dir,
+                        roster_csv=roster_path,
+                    )
+                    server_instance.session_manager.set_active_session(session_name)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(server_instance.get_state(), ensure_ascii=False).encode("utf-8"))
+
+                elif url.path == "/api/action":
                     sid = payload.get("student_id")
                     outcome = payload.get("outcome")
                     subtask = payload.get("subtask")
@@ -883,7 +1060,7 @@ class AppServer:
                                 history.append({"student": s["full_name"], "action": "excused", "subtask": subtask})
                             break
 
-                    save_session_state(server_instance.session_dir, students, history)
+                    server_instance.session_manager.save_state(students, history)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.end_headers()
@@ -911,16 +1088,17 @@ class AppServer:
                             s["valid_submission"] = len(tasks) >= 2
                             break
 
-                    save_session_state(server_instance.session_dir, students, history)
+                    server_instance.session_manager.save_state(students, history)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.end_headers()
                     self.wfile.write(json.dumps(server_instance.get_state(), ensure_ascii=False).encode("utf-8"))
 
                 elif url.path == "/api/reset":
-                    state_file = server_instance.session_dir / "session_state.json"
-                    if state_file.exists():
-                        os.remove(state_file)
+                    if server_instance.session_manager.active_session_dir:
+                        state_file = server_instance.session_manager.active_session_dir / "session_state.json"
+                        if state_file.exists():
+                            os.remove(state_file)
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json; charset=utf-8")
                     self.end_headers()
@@ -931,7 +1109,8 @@ class AppServer:
 
         server = HTTPServer(("127.0.0.1", self.port), Handler)
         url = f"http://localhost:{self.port}"
-        print(f"\n🚀 TA Presentation Selector running at: {url}")
+        print(f"\n🚀 Student Picker running at: {url}")
+        print("📂 Active Session: " + self.session_manager.active_session_name)
         print("🔒 Projection Safe: Student emails and private records hidden")
         print("Press Ctrl+C to stop.\n")
 

@@ -1,18 +1,32 @@
+"""
+CLI and entry point for student-picker.
+"""
+
 import argparse
 import sys
 from pathlib import Path
+from typing import Optional
 
-from .core import draw_student, get_eligible_pool, get_merged_students, load_session_state, load_submissions_data
+from .core import (
+    SessionManager,
+    draw_student,
+    load_session_state,
+)
 from .server import AppServer
 
 
-def run_cli_draw(data_path: Path, session_dir: Path, subtask: str = None):
-    base_students = load_submissions_data(data_path)
-    students = get_merged_students(base_students, session_dir)
-    state = load_session_state(session_dir)
+def run_cli_draw(session_manager: SessionManager, subtask: Optional[str] = None) -> None:
+    """Runs a single interactive random draw in the terminal."""
+    students = session_manager.get_current_students()
+    if not students:
+        print("❌ No students found in active session.")
+        return
+
+    session_dir = session_manager.active_session_dir
+    state = load_session_state(session_dir) if session_dir else {}
 
     task_name = f"Subtask {subtask}" if subtask and str(subtask).isdigit() else subtask
-    
+
     # Check if someone already presented
     if task_name:
         for sid, s in state.get("students", {}).items():
@@ -37,21 +51,22 @@ def run_cli_draw(data_path: Path, session_dir: Path, subtask: str = None):
     print("━" * 54 + "\n")
 
 
-def main():
+def main() -> None:
     # Check for 'ingest' subcommand
     if len(sys.argv) > 1 and sys.argv[1] == "ingest":
         ingest_parser = argparse.ArgumentParser(
             prog="student-picker ingest",
-            description="Inspect student notebooks against a base exercise sheet to detect subtasks."
+            description="Inspect student notebooks against a base exercise sheet to detect subtasks.",
         )
         ingest_parser.add_argument("file", help="Path to LMS Excel (.xlsx) or CSV export file")
         ingest_parser.add_argument("--base", default=None, help="Path to blank teacher template notebook (.ipynb)")
         ingest_parser.add_argument("--group", type=int, default=None, help="Filter by specific tutorial group number (e.g. 6)")
         ingest_parser.add_argument("--roster", default=None, help="Official group roster CSV for cross-referencing")
         ingest_parser.add_argument("--out", default=None, help="Output directory for generated submissions files")
-        
+
         iargs = ingest_parser.parse_args(sys.argv[2:])
         from .ingest import process_submissions_folder
+
         process_submissions_folder(
             submissions_file=Path(iargs.file).resolve(),
             base_notebook=Path(iargs.base).resolve() if iargs.base else None,
@@ -68,45 +83,41 @@ def main():
         "file",
         nargs="?",
         default=None,
-        help="Path to student submissions CSV or JSON file (defaults to demo data if omitted)"
+        help="Path to student submissions CSV or JSON file (defaults to demo data if omitted)",
     )
     parser.add_argument("--cli", action="store_true", help="Run in terminal CLI mode instead of starting Web UI")
     parser.add_argument("--task", type=str, default=None, help="Subtask number or name to draw for (e.g. 1, 2)")
     parser.add_argument("--port", type=int, default=8006, help="Web UI port (default: 8006)")
     parser.add_argument("--no-browser", action="store_true", help="Do not automatically launch browser")
-    parser.add_argument("--session-dir", type=str, default=None, help="Directory for storing session state (default: ~/.ta_selector/default)")
+    parser.add_argument("--session-dir", type=str, default=None, help="Directory for storing session state")
     parser.add_argument("--demo", action="store_true", help="Run with built-in demo roster")
 
     args = parser.parse_args()
 
-    # Determine data file
+    # Determine default data file
     package_root = Path(__file__).resolve().parent.parent
     demo_file = package_root / "demo" / "demo_roster.csv"
 
-    if args.demo or (not args.file and not Path("submissions.json").exists() and not Path("submissions.csv").exists()):
-        data_path = demo_file
+    default_path = None
+    if args.demo:
+        default_path = demo_file
         print("💡 Using built-in demo dataset (zero real student data).")
     elif args.file:
-        data_path = Path(args.file).resolve()
-    elif Path("submissions.json").exists():
-        data_path = Path("submissions.json").resolve()
-    else:
-        data_path = Path("submissions.csv").resolve()
+        default_path = Path(args.file).resolve()
+        if not default_path.exists():
+            print(f"Error: Data file not found at {default_path}")
+            sys.exit(1)
 
-    if not data_path.exists():
-        print(f"Error: Data file not found at {data_path}")
-        sys.exit(1)
+    session_manager = SessionManager(base_dir=Path.cwd(), default_session_path=default_path)
 
-    # Determine session directory
     if args.session_dir:
-        session_dir = Path(args.session_dir).resolve()
-    else:
-        session_dir = data_path.parent / ".session_data"
+        session_manager.active_session_dir = Path(args.session_dir).resolve()
+        session_manager.active_session_dir.mkdir(parents=True, exist_ok=True)
 
     if args.cli:
-        run_cli_draw(data_path, session_dir, subtask=args.task)
+        run_cli_draw(session_manager, subtask=args.task)
     else:
-        server = AppServer(data_path, session_dir, port=args.port)
+        server = AppServer(session_manager, port=args.port)
         server.run(auto_open=not args.no_browser)
 
 
