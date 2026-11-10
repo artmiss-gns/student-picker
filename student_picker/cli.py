@@ -38,6 +38,29 @@ def run_cli_draw(data_path: Path, session_dir: Path, subtask: str = None):
 
 
 def main():
+    # Check for 'ingest' subcommand
+    if len(sys.argv) > 1 and sys.argv[1] == "ingest":
+        ingest_parser = argparse.ArgumentParser(
+            prog="student-picker ingest",
+            description="Inspect student notebooks against a base exercise sheet to detect subtasks."
+        )
+        ingest_parser.add_argument("file", help="Path to LMS Excel (.xlsx) or CSV export file")
+        ingest_parser.add_argument("--base", default=None, help="Path to blank teacher template notebook (.ipynb)")
+        ingest_parser.add_argument("--group", type=int, default=None, help="Filter by specific tutorial group number (e.g. 6)")
+        ingest_parser.add_argument("--roster", default=None, help="Official group roster CSV for cross-referencing")
+        ingest_parser.add_argument("--out", default=None, help="Output directory for generated submissions files")
+        
+        iargs = ingest_parser.parse_args(sys.argv[2:])
+        from .ingest import process_submissions_folder
+        process_submissions_folder(
+            submissions_file=Path(iargs.file).resolve(),
+            base_notebook=Path(iargs.base).resolve() if iargs.base else None,
+            group_filter=iargs.group,
+            output_dir=Path(iargs.out).resolve() if iargs.out else None,
+            roster_csv=Path(iargs.roster).resolve() if iargs.roster else None,
+        )
+        return
+
     parser = argparse.ArgumentParser(
         description="student-picker: Pick random students for presentations and track participation."
     )

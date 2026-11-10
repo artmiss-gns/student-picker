@@ -21,23 +21,27 @@ Built with Python's standard library only. No external packages needed.
 
 ## Usage
 
-You can run it directly with Python:
+### 1. Ingest Homework Submissions (Automatic Notebook Diffing)
+If your LMS (ILIAS, Moodle, etc.) exports a spreadsheet and a folder of student Jupyter notebooks, you can automatically detect which subtasks each student answered:
 
 ```bash
-# Open the web interface (defaults to demo data if no file is given)
-python3 -m student_picker.cli --demo
+student-picker ingest "Exercise_1.xlsx" --base "blank_exercise1.ipynb" --group 6
+```
+This compares each student's `.ipynb` against the blank sheet, checks for completed code/answers, and creates `submissions.csv` and `submissions.json`.
 
-# Or pass your own CSV/JSON roster file
-python3 -m student_picker.cli students.csv
+### 2. Run the Web Interface
+```bash
+# Launch the picker (automatically loads generated submissions.csv or submissions.json)
+student-picker
 
-# Or run directly in terminal (no browser)
-python3 -m student_picker.cli students.csv --cli --task 1
+# Or test with the built-in demo dataset
+student-picker --demo
 ```
 
-If you install it:
+### 3. Terminal CLI Mode
 ```bash
-pip install -e .
-student-picker students.csv
+# Draw directly in the terminal without opening a browser
+student-picker submissions.csv --cli --task 1
 ```
 
 ---
