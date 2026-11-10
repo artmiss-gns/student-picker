@@ -39,7 +39,7 @@ def run_cli_draw(data_path: Path, session_dir: Path, subtask: str = None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="TA Presentation Selector: Random student selection & strike tracking for courses."
+        description="student-picker: Pick random students for presentations and track participation."
     )
     parser.add_argument(
         "file",

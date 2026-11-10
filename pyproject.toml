@@ -3,24 +3,17 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ta-selector"
+name = "student-picker"
 version = "0.1.0"
-description = "Lightweight, projection-safe presentation selector and strike tracker for university tutorials and lab courses."
+description = "A simple script to pick random students for class presentations and keep track of who presented."
 readme = "README.md"
 authors = [{ name = "Artmiss" }]
 license = { text = "MIT" }
 requires-python = ">=3.9"
 dependencies = []
-keywords = ["teaching", "education", "tutorial", "presentation", "random-selector", "grading", "ta"]
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-    "Topic :: Education",
-]
 
 [project.scripts]
-ta-selector = "ta_selector.cli:main"
+student-picker = "student_picker.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

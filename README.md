@@ -1,84 +1,74 @@
-# ta-selector
+# student-picker
 
-A lightweight, projection-safe presentation selector and strike tracker for university tutorials, seminars, and lab courses.
+A simple script to pick random students for class presentations and keep track of who presented.
 
-Built with pure Python standard library (`http.server`, `json`, `csv`). No external web frameworks, node dependencies, or complex setup required.
+It has a lightweight web UI you can put on the projector (with big names and no private info like emails or IDs shown) and a quick CLI mode if you just want to draw from the terminal.
 
----
-
-## Why this exists
-
-During university tutorial sessions where students are selected randomly to present homework solutions:
-1. **Projection Safety**: Projecting an Excel spreadsheet or raw roster exposes student IDs, emails, and internal notes to the entire room. `ta-selector` renders large 44px names on a clean stage without displaying private contact info.
-2. **Subtask-Specific Drawing**: Students should only be drawn for subtasks they actually submitted or attempted.
-3. **Course Policy Rules**: Supports typical tutorial rules:
-   - **Passed**: Student explained their solution satisfactorily (Rule 4).
-   - **Failed Attempt**: Student attempted in good faith but couldn't explain (stays in the pool, no strike).
-   - **Strike / Absent**: Student was called but absent without an excuse (+1 strike).
-   - **Excused**: Documented medical/official absence.
-4. **Already-Presented Protection**: Warns and requires confirmation before drawing a student for a subtask that has already been presented.
-5. **Interactive Subtask Overrides**: Clickable subtask badges (`T1`–`T4`) in the table and on stage allow the TA to toggle submission status in real-time if a student corrects their status in class.
+Built with Python's standard library only. No external packages needed.
 
 ---
 
-## Installation
+## Features
+
+- **Projector safe:** Shows only student names in large text. No private emails, IDs, or grades on screen.
+- **Subtask aware:** Only draws from students who actually submitted that specific exercise task.
+- **Attendance & strikes:** Record if a student passed, couldn't explain (no strike), or was absent (+1 strike).
+- **Already presented warning:** Warns you if you try to draw for a subtask someone already presented.
+- **Manual toggles:** You can click subtask badges (`T1`–`T4`) in the list to quickly add or remove tasks if someone asks.
+- **Auto saves:** Keeps state in a local `.session_data/session_state.json` file.
+
+---
+
+## Usage
+
+You can run it directly with Python:
 
 ```bash
-# Clone the repository
-git clone https://github.com/artmiss-gns/ta-selector.git
-cd ta-selector
+# Open the web interface (defaults to demo data if no file is given)
+python3 -m student_picker.cli --demo
 
-# Install in editable mode
+# Or pass your own CSV/JSON roster file
+python3 -m student_picker.cli students.csv
+
+# Or run directly in terminal (no browser)
+python3 -m student_picker.cli students.csv --cli --task 1
+```
+
+If you install it:
+```bash
 pip install -e .
+student-picker students.csv
 ```
 
 ---
 
-## Quick Start
+## Keyboard shortcuts (in browser)
 
-### 1. Run with Demo Data
-Test the interface immediately without any data files:
-```bash
-ta-selector --demo
-```
-This automatically launches your browser at `http://localhost:8006` loaded with a synthetic demo roster.
-
-### 2. Run with Your Own Roster
-Pass your CSV or JSON spreadsheet:
-```bash
-ta-selector students.csv
-```
-
-### 3. Terminal CLI Mode
-If you prefer running directly in your terminal without a browser:
-```bash
-# Draw for any task
-ta-selector students.csv --cli
-
-# Draw specifically for Subtask 2
-ta-selector students.csv --cli --task 2
-```
+- `Space`: Draw random student
+- `P`: Mark as passed
+- `F`: Mark as failed attempt (stays in pool)
+- `S`: Record strike (absent)
+- `Esc`: Clear / cancel
 
 ---
 
-## Input Formats
+## Input format
 
-### CSV Format
-`ta-selector` accepts simple CSV files with the following headers:
+A basic CSV like this:
 ```csv
 Full Name,Email,Subtasks Attempted
 Alice Smith,alice@example.edu,"Subtask 1; Subtask 2; Subtask 3"
 Bob Jones,bob@example.edu,"Subtask 1; Subtask 2"
 ```
 
-### JSON Format
+Or JSON:
 ```json
 {
   "submissions": [
     {
-      "id": "std_1",
+      "id": "1",
       "full_name": "Alice Smith",
-      "subtasks_attempted": ["Subtask 1", "Subtask 2", "Subtask 3"]
+      "subtasks_attempted": ["Subtask 1", "Subtask 2"]
     }
   ]
 }
@@ -86,18 +76,6 @@ Bob Jones,bob@example.edu,"Subtask 1; Subtask 2"
 
 ---
 
-## Keyboard Shortcuts (In-Class Presentation View)
-
-| Key | Action |
-| :--- | :--- |
-| `Space` | Draw a random eligible student |
-| `P` | Mark current student as **Passed** |
-| `F` | Mark as **Failed Attempt** (stays in pool, no strike) |
-| `S` | Record **Strike** (absent / refused) |
-| `Esc` | Clear stage / dismiss warning modal |
-
----
-
 ## License
 
-MIT License. Feel free to adapt for your own courses and tutorial groups.
+MIT
